@@ -24,7 +24,7 @@ pip3 install -r requirements.txt
 
 ## Inference
 
-You have to download the [pretrained models]() and put them in ``output/ckpt/LibriTTS/``.
+You have to download the [pretrained models](https://drive.google.com/drive/folders/1fQmu1v7fRgfM-TwxAJ96UUgnl79f1FHt?usp=sharing) and put them in ``output/ckpt/LibriTTS/``.
 
 For English single-speaker TTS, run
 ```
@@ -98,11 +98,11 @@ tensorboard --logdir output/log/LibriTTS
 ```
 
 to serve TensorBoard on your localhost.
-<!-- The loss curves, synthesized mel-spectrograms, and audios are shown.
+The loss curves, synthesized mel-spectrograms, and audios are shown.
 
 ![](./img/tensorboard_loss.png)
 ![](./img/tensorboard_spec.png)
-![](./img/tensorboard_audio.png) -->
+![](./img/tensorboard_audio.png)
 
 # Implementation Issues
 
