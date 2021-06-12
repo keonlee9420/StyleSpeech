@@ -5,7 +5,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .modules import MelStyleEncoder, PhonemeEncoder, MelDecoder, VarianceAdaptor
+from .modules import (
+    MelStyleEncoder,
+    PhonemeEncoder,
+    MelDecoder, 
+    VarianceAdaptor,
+    PhonemeDiscriminator,
+    StyleDiscriminator,
+)
 from utils.tools import get_mask_from_lengths
 
 
@@ -28,20 +35,8 @@ class StyleSpeech(nn.Module):
             model_config["transformer"]["decoder_hidden"],
             preprocess_config["preprocessing"]["mel"]["n_mel_channels"],
         )
-
-        self.speaker_emb = None
-        if model_config["multi_speaker"]:
-            with open(
-                os.path.join(
-                    preprocess_config["path"]["preprocessed_path"], "speakers.json"
-                ),
-                "r",
-            ) as f:
-                n_speaker = len(json.load(f))
-            self.speaker_emb = nn.Embedding(
-                n_speaker,
-                model_config["transformer"]["encoder_hidden"],
-            )
+        self.phoneme_discriminator = PhonemeDiscriminator(preprocess_config, model_config)
+        self.style_discriminator = StyleDiscriminator(preprocess_config, model_config)
 
     def forward(
         self,
@@ -67,13 +62,9 @@ class StyleSpeech(nn.Module):
         output = self.phoneme_encoder(texts, style_vector, src_masks)
         output = self.phoneme_linear(output)
 
-        if self.speaker_emb is not None:
-            output = output + self.speaker_emb(speakers).unsqueeze(1).expand(
-                -1, max_src_len, -1
-            )
-
         (
             output,
+            upsampled_text,
             p_predictions,
             e_predictions,
             log_d_predictions,
@@ -95,6 +86,11 @@ class StyleSpeech(nn.Module):
 
         output, mel_masks = self.mel_decoder(output, style_vector, mel_masks)
         output = self.mel_linear(output)
+
+        p_disc = self.phoneme_discriminator(upsampled_text, output, mel_masks)
+        s_disc, style_logit = self.style_discriminator(speakers, style_vector, output, mel_masks)
+        print(p_disc.shape, s_disc.shape, style_logit.shape)
+        exit(0)
 
         return (
             output,

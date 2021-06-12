@@ -31,6 +31,11 @@ variance_predictor:
 variance_embedding:
   kernel_size: 9
 
+discriminator:
+  mel_linear_size: 256
+  phoneme_layer: 3
+  phoneme_hidden: 512
+
 multi_speaker: True
 
 max_seq_len: 1000

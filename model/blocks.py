@@ -44,7 +44,7 @@ class StyleAdaptiveLayerNorm(nn.Module):
 class FCBlock(nn.Module):
     """ Fully Connected Block """
 
-    def __init__(self, in_features, out_features, activation=None, bias=False, dropout=None):
+    def __init__(self, in_features, out_features, activation=None, bias=False, dropout=None, spectral_norm=False):
         super(FCBlock, self).__init__()
         self.fc_layer = nn.Sequential()
         self.fc_layer.add_module(
@@ -53,6 +53,7 @@ class FCBlock(nn.Module):
                 in_features,
                 out_features,
                 bias,
+                spectral_norm,
             ),
         )
         if activation is not None:
@@ -69,13 +70,15 @@ class FCBlock(nn.Module):
 class LinearNorm(nn.Module):
     """ LinearNorm Projection """
 
-    def __init__(self, in_features, out_features, bias=False):
+    def __init__(self, in_features, out_features, bias=False, spectral_norm=False):
         super(LinearNorm, self).__init__()
         self.linear = nn.Linear(in_features, out_features, bias)
 
         nn.init.xavier_uniform_(self.linear.weight)
         if bias:
             nn.init.constant_(self.linear.bias, 0.0)
+        if spectral_norm:
+            nn.utils.spectral_norm(self.linear)
     
     def forward(self, x):
         x = self.linear(x)
@@ -85,7 +88,7 @@ class LinearNorm(nn.Module):
 class Conv1DBlock(nn.Module):
     """ 1D Convolutional Block """
 
-    def __init__(self, in_channels, out_channels, kernel_size, activation=None, dropout=None):
+    def __init__(self, in_channels, out_channels, kernel_size, activation=None, dropout=None, spectral_norm=False):
         super(Conv1DBlock, self).__init__()
 
         self.conv_layer = nn.Sequential()
@@ -99,6 +102,7 @@ class Conv1DBlock(nn.Module):
                 padding=int((kernel_size - 1) / 2),
                 dilation=1,
                 w_init_gain="tanh",
+                spectral_norm=spectral_norm,
             ),
         )
         if activation is not None:
@@ -132,6 +136,7 @@ class ConvNorm(nn.Module):
         dilation=1,
         bias=True,
         w_init_gain="linear",
+        spectral_norm=False,
     ):
         super(ConvNorm, self).__init__()
 
@@ -148,6 +153,8 @@ class ConvNorm(nn.Module):
             dilation=dilation,
             bias=bias,
         )
+        if spectral_norm:
+            nn.utils.spectral_norm(self.conv)
 
     def forward(self, signal):
         conv_signal = self.conv(signal)
@@ -186,21 +193,21 @@ class SALNFFTBlock(nn.Module):
 class MultiHeadAttention(nn.Module):
     """ Multi-Head Attention """
 
-    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1, layer_norm=False):
+    def __init__(self, n_head, d_model, d_k, d_v, dropout=0.1, layer_norm=False, spectral_norm=False):
         super(MultiHeadAttention, self).__init__()
 
         self.n_head = n_head
         self.d_k = d_k
         self.d_v = d_v
 
-        self.w_qs = LinearNorm(d_model, n_head * d_k)
-        self.w_ks = LinearNorm(d_model, n_head * d_k)
-        self.w_vs = LinearNorm(d_model, n_head * d_v)
+        self.w_qs = LinearNorm(d_model, n_head * d_k, spectral_norm=spectral_norm)
+        self.w_ks = LinearNorm(d_model, n_head * d_k, spectral_norm=spectral_norm)
+        self.w_vs = LinearNorm(d_model, n_head * d_v, spectral_norm=spectral_norm)
 
         self.attention = ScaledDotProductAttention(temperature=np.power(d_k, 0.5))
         self.layer_norm = nn.LayerNorm(d_model) if layer_norm else None
 
-        self.fc = LinearNorm(n_head * d_v, d_model)
+        self.fc = LinearNorm(n_head * d_v, d_model, spectral_norm=spectral_norm)
 
         self.dropout = nn.Dropout(dropout)
 

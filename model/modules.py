@@ -6,6 +6,7 @@ from collections import OrderedDict
 
 import torch
 import torch.nn as nn
+from torch.nn.parameter import Parameter
 import numpy as np
 import torch.nn.functional as F
 
@@ -66,7 +67,6 @@ class MelStyleEncoder(nn.Module):
         dropout = model_config["melencoder"]["encoder_dropout"]
 
         self.max_seq_len = model_config["max_seq_len"]
-        self.d_melencoder = d_melencoder
 
         self.fc_1 = FCBlock(n_mel_channels, d_melencoder)
 
@@ -395,7 +395,8 @@ class VarianceAdaptor(nn.Module):
         e_control=1.0,
         d_control=1.0,
     ):
-
+        upsampled_text = None
+        text_encoding = x
         log_duration_prediction = self.duration_predictor(x, src_mask)
         if self.pitch_feature_level == "phoneme_level":
             pitch_prediction, pitch_embedding = self.get_pitch_embedding(
@@ -410,6 +411,7 @@ class VarianceAdaptor(nn.Module):
 
         if duration_target is not None:
             x, mel_len = self.length_regulator(x, duration_target, max_len)
+            upsampled_text, _ = self.length_regulator(text_encoding, duration_target, max_len)
             duration_rounded = duration_target
         else:
             duration_rounded = torch.clamp(
@@ -418,6 +420,7 @@ class VarianceAdaptor(nn.Module):
             )
             max_len = int(duration_rounded.sum(dim=1).max().item())
             x, mel_len = self.length_regulator(x, duration_rounded, max_len)
+            upsampled_text, _ = self.length_regulator(text_encoding, duration_rounded, max_len)
             mel_mask = get_mask_from_lengths(mel_len)
 
         if self.pitch_feature_level == "frame_level":
@@ -433,6 +436,7 @@ class VarianceAdaptor(nn.Module):
 
         return (
             x,
+            upsampled_text,
             pitch_prediction,
             energy_prediction,
             log_duration_prediction,
@@ -578,3 +582,165 @@ class Conv(nn.Module):
         x = x.contiguous().transpose(1, 2)
 
         return x
+
+
+class PhonemeDiscriminator(nn.Module):
+    """ Phoneme Discriminator """
+
+    def __init__(self, preprocess_config, model_config):
+        super(PhonemeDiscriminator, self).__init__()
+        n_mel_channels = preprocess_config["preprocessing"]["mel"]["n_mel_channels"]
+        d_mel_linear = model_config["discriminator"]["mel_linear_size"]
+        d_model = model_config["discriminator"]["phoneme_hidden"]
+        d_layer = model_config["discriminator"]["phoneme_layer"]
+
+        self.max_seq_len = model_config["max_seq_len"]
+        self.mel_linear = nn.Sequential(
+            FCBlock(n_mel_channels, d_mel_linear, activation=nn.LeakyReLU(), spectral_norm=True),
+            FCBlock(d_mel_linear, d_mel_linear, activation=nn.LeakyReLU(), spectral_norm=True),
+        )
+        self.discriminator_stack = nn.ModuleList(
+            [
+                FCBlock(
+                    d_model, d_model, activation=nn.LeakyReLU(), spectral_norm=True
+                )
+                for _ in range(d_layer)
+            ]
+        )
+        self.final_linear = FCBlock(d_model, 1, spectral_norm=True)
+
+    def forward(self, upsampled_text, mel, mask=None):
+
+        max_len = mel.shape[1]
+        max_len = min(max_len, self.max_seq_len)
+        upsampled_text = upsampled_text[:, :max_len, :]
+
+        mel = self.mel_linear(mel)
+        if mask is not None:
+            mel = mel.masked_fill(mask.unsqueeze(-1), 0)
+        x = torch.cat([upsampled_text, mel], dim=-1)
+
+        # Phoneme Discriminator
+        for _, layer in enumerate(self.discriminator_stack):
+            x = layer(x)
+        x = self.final_linear(x) # [B, T, 1]
+        if mask is not None:
+            x = x.masked_fill(mask.unsqueeze(-1), 0)
+
+        # Temporal Average Pooling
+        x = torch.mean(x, dim=1, keepdim=True) # [B, 1, 1]
+        x = x.squeeze()  # [B,]
+
+        return x
+
+
+class StyleDiscriminator(nn.Module):
+    """ Style Discriminator """
+
+    def __init__(self, preprocess_config, model_config):
+        super(StyleDiscriminator, self).__init__()
+        n_position = model_config["max_seq_len"] + 1
+        n_mel_channels = preprocess_config["preprocessing"]["mel"]["n_mel_channels"]
+        d_melencoder = model_config["melencoder"]["encoder_hidden"]
+        n_spectral_layer = model_config["melencoder"]["spectral_layer"]
+        n_temporal_layer = model_config["melencoder"]["temporal_layer"]
+        n_slf_attn_layer = model_config["melencoder"]["slf_attn_layer"]
+        n_slf_attn_head = model_config["melencoder"]["slf_attn_head"]
+        d_k = d_v = (
+            model_config["melencoder"]["encoder_hidden"]
+            // model_config["melencoder"]["slf_attn_head"]
+        )
+        kernel_size = model_config["melencoder"]["conv_kernel_size"]
+
+        self.max_seq_len = model_config["max_seq_len"]
+
+        self.fc_1 = FCBlock(n_mel_channels, d_melencoder, spectral_norm=True)
+
+        self.spectral_stack = nn.ModuleList(
+            [
+                FCBlock(
+                    d_melencoder, d_melencoder, activation=nn.LeakyReLU(), spectral_norm=True
+                )
+                for _ in range(n_spectral_layer)
+            ]
+        )
+
+        self.temporal_stack = nn.ModuleList(
+            [
+                Conv1DBlock(
+                    d_melencoder, d_melencoder, kernel_size, activation=nn.LeakyReLU(), spectral_norm=True
+                )
+                for _ in range(n_temporal_layer)
+            ]
+        )
+
+        self.slf_attn_stack = nn.ModuleList(
+            [
+                MultiHeadAttention(
+                    n_slf_attn_head, d_melencoder, d_k, d_v, layer_norm=True, spectral_norm=True
+                )
+                for _ in range(n_slf_attn_layer)
+            ]
+        )
+
+        self.fc_2 = FCBlock(d_melencoder, d_melencoder, spectral_norm=True)
+
+        self.V = FCBlock(d_melencoder, d_melencoder)
+        self.w_b_0 = FCBlock(1, 1, bias=True)
+
+        self.style_prototype = None
+        if model_config["multi_speaker"]:
+            with open(
+                os.path.join(
+                    preprocess_config["path"]["preprocessed_path"], "speakers.json"
+                ),
+                "r",
+            ) as f:
+                n_speaker = len(json.load(f))
+            self.style_prototype = nn.Embedding(
+                n_speaker,
+                d_melencoder,
+            )
+
+    def forward(self, speakers, w, mel, mask):
+
+        w = w.squeeze() # [B, H]
+        max_len = mel.shape[1]
+        slf_attn_mask = mask.unsqueeze(1).expand(-1, max_len, -1)
+
+        x = self.fc_1(mel)
+
+        # Spectral Processing
+        for _, layer in enumerate(self.spectral_stack):
+            x = layer(x)
+
+        # Temporal Processing
+        for _, layer in enumerate(self.temporal_stack):
+            residual = x
+            x = layer(x)
+            x = residual + x
+
+        # Multi-head self-attention
+        for _, layer in enumerate(self.slf_attn_stack):
+            residual = x
+            x, _ = layer(
+                x, x, x, mask=slf_attn_mask
+            )
+            x = residual + x
+
+        # Final Layer
+        x = self.fc_2(x) # [B, T, H]
+
+        # Temporal Average Pooling, h(x)
+        x = torch.mean(x, dim=1) # [B, H]
+
+        # Output Computation
+        s_i = self.style_prototype(speakers).unsqueeze(1) # [B, 1, H]
+        V = self.V(x).unsqueeze(2) # [B, H, 1]
+        o = torch.matmul(s_i, V).squeeze(2) # [B, 1]
+        o = self.w_b_0(o).squeeze() # [B,]
+
+        # Get Style Logit
+        style_logit = torch.matmul(w, self.style_prototype.weight.contiguous().transpose(0, 1)) # [B, K]
+
+        return o, style_logit
