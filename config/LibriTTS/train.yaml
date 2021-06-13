@@ -15,7 +15,7 @@ optimizer:
   lr_disc: 0.00002
   alpha: 10
 step:
-  meta_learning_step: 120000
+  meta_learning_warmup: 120000
   total_step: 200000
   log_step: 100
   synth_step: 1000

@@ -73,7 +73,7 @@ def main(args, configs):
     # Training
     step = args.restore_step + 1
     epoch = 1
-    meta_learning_step = train_config["step"]["meta_learning_step"]
+    meta_learning_warmup = train_config["step"]["meta_learning_warmup"]
     grad_acc_step = train_config["optimizer"]["grad_acc_step"]
     grad_clip_thresh = train_config["optimizer"]["grad_clip_thresh"]
     total_step = train_config["step"]["total_step"]
@@ -93,7 +93,7 @@ def main(args, configs):
                 batch = to_device(batch, device)
 
                 # Warm-up Stage
-                if step <= meta_learning_step:
+                if step <= meta_learning_warmup:
                     # Forward
                     output = (None, None, *model(*(batch[2:-5])))
                 # Meta Learning
@@ -109,7 +109,7 @@ def main(args, configs):
                 backward(model, optimizer_main, total_loss, step, grad_acc_step, grad_clip_thresh)
 
                 # Meta Learning
-                if step > meta_learning_step:
+                if step > meta_learning_warmup:
                     # Step 2: Update D_t and D_s
                     output_disc = model.module.meta_learner_2(*(batch[2:]))
 
