@@ -3,7 +3,7 @@ path:
   log_path: "./output/log/LibriTTS_meta_learner"
   result_path: "./output/result/LibriTTS_meta_learner"
 optimizer:
-  batch_size: 20
+  batch_size: 16
   betas: [0.9, 0.98]
   eps: 0.000000001
   weight_decay: 0.0
