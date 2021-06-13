@@ -1,12 +1,15 @@
 import json
 import math
 import os
+import random
 
 import numpy as np
 from torch.utils.data import Dataset
 
 from text import text_to_sequence
 from utils.tools import pad_1D, pad_2D, expand
+
+random.seed(1234)
 
 
 class Dataset(Dataset):
@@ -18,7 +21,7 @@ class Dataset(Dataset):
         self.cleaners = preprocess_config["preprocessing"]["text"]["text_cleaners"]
         self.batch_size = train_config["optimizer"]["batch_size"]
 
-        self.basename, self.speaker, self.text, self.raw_text = self.process_meta(
+        self.basename, self.speaker, self.text, self.raw_text, self.speaker_to_ids = self.process_meta(
             filename
         )
         with open(os.path.join(self.preprocessed_path, "speakers.json")) as f:
@@ -35,6 +38,9 @@ class Dataset(Dataset):
         speaker_id = self.speaker_map[speaker]
         raw_text = self.raw_text[idx]
         phone = np.array(text_to_sequence(self.text[idx], self.cleaners))
+        query_idx = random.choice([x for x in self.speaker_to_ids[speaker] if x != idx]) # Sample the query text
+        raw_quary_text = self.raw_text[query_idx]
+        query_phone = np.array(text_to_sequence(self.text[query_idx], self.cleaners))
         mel_path = os.path.join(
             self.preprocessed_path,
             "mel",
@@ -59,16 +65,25 @@ class Dataset(Dataset):
             "{}-duration-{}.npy".format(speaker, basename),
         )
         duration = np.load(duration_path)
+        quary_duration_path = os.path.join(
+            self.preprocessed_path,
+            "duration",
+            "{}-duration-{}.npy".format(self.speaker[query_idx], self.basename[query_idx]),
+        )
+        quary_duration = np.load(quary_duration_path)
 
         sample = {
             "id": basename,
             "speaker": speaker_id,
             "text": phone,
             "raw_text": raw_text,
+            "quary_text": query_phone,
+            "raw_quary_text": raw_quary_text,
             "mel": mel,
             "pitch": pitch,
             "energy": energy,
             "duration": duration,
+            "quary_duration": quary_duration,
         }
 
         return sample
@@ -81,33 +96,44 @@ class Dataset(Dataset):
             speaker = []
             text = []
             raw_text = []
-            for line in f.readlines():
+            speaker_to_ids = dict()
+            for i, line in enumerate(f.readlines()):
                 n, s, t, r = line.strip("\n").split("|")
                 name.append(n)
                 speaker.append(s)
                 text.append(t)
                 raw_text.append(r)
-            return name, speaker, text, raw_text
+                if s not in speaker_to_ids:
+                    speaker_to_ids[s] = [i]
+                else:
+                    speaker_to_ids[s] += [i]
+            return name, speaker, text, raw_text, speaker_to_ids
 
     def reprocess(self, data, idxs):
         ids = [data[idx]["id"] for idx in idxs]
         speakers = [data[idx]["speaker"] for idx in idxs]
         texts = [data[idx]["text"] for idx in idxs]
         raw_texts = [data[idx]["raw_text"] for idx in idxs]
+        quary_texts = [data[idx]["quary_text"] for idx in idxs]
+        raw_quary_texts = [data[idx]["raw_quary_text"] for idx in idxs]
         mels = [data[idx]["mel"] for idx in idxs]
         pitches = [data[idx]["pitch"] for idx in idxs]
         energies = [data[idx]["energy"] for idx in idxs]
         durations = [data[idx]["duration"] for idx in idxs]
+        quary_durations = [data[idx]["quary_duration"] for idx in idxs]
 
         text_lens = np.array([text.shape[0] for text in texts])
+        quary_text_lens = np.array([text.shape[0] for text in quary_texts])
         mel_lens = np.array([mel.shape[0] for mel in mels])
 
         speakers = np.array(speakers)
         texts = pad_1D(texts)
+        quary_texts = pad_1D(quary_texts)
         mels = pad_2D(mels)
         pitches = pad_1D(pitches)
         energies = pad_1D(energies)
         durations = pad_1D(durations)
+        quary_durations = pad_1D(quary_durations)
 
         return (
             ids,
@@ -122,6 +148,11 @@ class Dataset(Dataset):
             pitches,
             energies,
             durations,
+            raw_quary_texts,
+            quary_texts,
+            quary_text_lens,
+            max(quary_text_lens),
+            quary_durations,
         )
 
     def collate_fn(self, data):

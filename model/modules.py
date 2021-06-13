@@ -382,6 +382,20 @@ class VarianceAdaptor(nn.Module):
             embedding = self.energy_embedding(prediction.unsqueeze(-1))
         return prediction, embedding
 
+    def upsample(self, x, mel_mask, max_len, log_duration_prediction=None, duration_target=None, d_control=1.0):
+        if duration_target is not None:
+            x, mel_len = self.length_regulator(x, duration_target, max_len)
+            duration_rounded = duration_target
+        else:
+            duration_rounded = torch.clamp(
+                (torch.round(torch.exp(log_duration_prediction) - 1) * d_control),
+                min=0,
+            )
+            max_len = int(duration_rounded.sum(dim=1).max().item())
+            x, mel_len = self.length_regulator(x, duration_rounded, max_len)
+            mel_mask = get_mask_from_lengths(mel_len)
+        return x, duration_rounded, mel_len, mel_mask
+
     def forward(
         self,
         x,
@@ -396,7 +410,6 @@ class VarianceAdaptor(nn.Module):
         d_control=1.0,
     ):
         upsampled_text = None
-        text_encoding = x
         log_duration_prediction = self.duration_predictor(x, src_mask)
         if self.pitch_feature_level == "phoneme_level":
             pitch_prediction, pitch_embedding = self.get_pitch_embedding(
@@ -409,19 +422,9 @@ class VarianceAdaptor(nn.Module):
             )
             x = x + energy_embedding
 
-        if duration_target is not None:
-            x, mel_len = self.length_regulator(x, duration_target, max_len)
-            upsampled_text, _ = self.length_regulator(text_encoding, duration_target, max_len)
-            duration_rounded = duration_target
-        else:
-            duration_rounded = torch.clamp(
-                (torch.round(torch.exp(log_duration_prediction) - 1) * d_control),
-                min=0,
-            )
-            max_len = int(duration_rounded.sum(dim=1).max().item())
-            x, mel_len = self.length_regulator(x, duration_rounded, max_len)
-            upsampled_text, _ = self.length_regulator(text_encoding, duration_rounded, max_len)
-            mel_mask = get_mask_from_lengths(mel_len)
+        x, duration_rounded, mel_len, mel_mask = self.upsample(
+            x, mel_mask, max_len, log_duration_prediction=log_duration_prediction, duration_target=duration_target, d_control=d_control
+        )
 
         if self.pitch_feature_level == "frame_level":
             pitch_prediction, pitch_embedding = self.get_pitch_embedding(
@@ -436,7 +439,6 @@ class VarianceAdaptor(nn.Module):
 
         return (
             x,
-            upsampled_text,
             pitch_prediction,
             energy_prediction,
             log_duration_prediction,
@@ -609,23 +611,27 @@ class PhonemeDiscriminator(nn.Module):
         )
         self.final_linear = FCBlock(d_model, 1, spectral_norm=True)
 
-    def forward(self, upsampled_text, mel, mask=None):
+    def forward(self, upsampler, text, mel, max_len, mask, duration_target):
 
-        max_len = mel.shape[1]
+        # Prepare Upsampled Text
+        upsampled_text, _, _, _ = upsampler(
+            text, mask, max_len, duration_target=duration_target
+        )
         max_len = min(max_len, self.max_seq_len)
         upsampled_text = upsampled_text[:, :max_len, :]
 
-        mel = self.mel_linear(mel)
-        if mask is not None:
-            mel = mel.masked_fill(mask.unsqueeze(-1), 0)
+        # Prepare Mel
+        mel = self.mel_linear(mel)[:, :max_len, :]
+        mel = mel.masked_fill(mask.unsqueeze(-1)[:, :max_len, :], 0)
+
+        # Prepare Input
         x = torch.cat([upsampled_text, mel], dim=-1)
 
         # Phoneme Discriminator
         for _, layer in enumerate(self.discriminator_stack):
             x = layer(x)
         x = self.final_linear(x) # [B, T, 1]
-        if mask is not None:
-            x = x.masked_fill(mask.unsqueeze(-1), 0)
+        x = x.masked_fill(mask.unsqueeze(-1)[:, :max_len, :], 0)
 
         # Temporal Average Pooling
         x = torch.mean(x, dim=1, keepdim=True) # [B, 1, 1]
@@ -688,23 +694,8 @@ class StyleDiscriminator(nn.Module):
         self.V = FCBlock(d_melencoder, d_melencoder)
         self.w_b_0 = FCBlock(1, 1, bias=True)
 
-        self.style_prototype = None
-        if model_config["multi_speaker"]:
-            with open(
-                os.path.join(
-                    preprocess_config["path"]["preprocessed_path"], "speakers.json"
-                ),
-                "r",
-            ) as f:
-                n_speaker = len(json.load(f))
-            self.style_prototype = nn.Embedding(
-                n_speaker,
-                d_melencoder,
-            )
+    def forward(self, style_prototype, speakers, mel, mask):
 
-    def forward(self, speakers, w, mel, mask):
-
-        w = w.squeeze() # [B, H]
         max_len = mel.shape[1]
         slf_attn_mask = mask.unsqueeze(1).expand(-1, max_len, -1)
 
@@ -735,12 +726,9 @@ class StyleDiscriminator(nn.Module):
         x = torch.mean(x, dim=1) # [B, H]
 
         # Output Computation
-        s_i = self.style_prototype(speakers).unsqueeze(1) # [B, 1, H]
+        s_i = style_prototype(speakers).unsqueeze(1) # [B, 1, H]
         V = self.V(x).unsqueeze(2) # [B, H, 1]
         o = torch.matmul(s_i, V).squeeze(2) # [B, 1]
         o = self.w_b_0(o).squeeze() # [B,]
 
-        # Get Style Logit
-        style_logit = torch.matmul(w, self.style_prototype.weight.contiguous().transpose(0, 1)) # [B, K]
-
-        return o, style_logit
+        return o

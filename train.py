@@ -79,7 +79,23 @@ def main(args, configs):
                 batch = to_device(batch, device)
 
                 # Forward
-                output = model(*(batch[2:]))
+                output = model(*(batch[2:-5]))
+
+                # Meta Learning
+                (
+                    D_s,
+                    D_t,
+                    G,
+                    p_predictions,
+                    e_predictions,
+                    log_d_predictions,
+                    d_rounded,
+                    src_masks,
+                    mel_masks,
+                    src_lens,
+                    mel_lens,
+                ) = model.module.meta_learner_1(*(batch[2:]))
+                D_t_s, D_t_q, D_s_s, D_s_q, style_logit = model.module.meta_learner_2(*(batch[2:]))
 
                 # Cal Loss
                 losses = Loss(batch, output)

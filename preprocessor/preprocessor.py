@@ -12,6 +12,8 @@ from tqdm import tqdm
 
 import audio as Audio
 
+random.seed(1234)
+
 
 class Preprocessor:
     def __init__(self, config):
