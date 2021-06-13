@@ -10,12 +10,24 @@ from tqdm import tqdm
 
 from utils.model import get_model, get_vocoder, get_param_num
 from utils.tools import to_device, log, synth_one_sample
-from model import StyleSpeechLoss
+from model import MetaStyleSpeechLossMain, MetaStyleSpeechLossDisc
 from dataset import Dataset
 
 from evaluate import evaluate
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def backward(model, optimizer, total_loss, step, grad_acc_step, grad_clip_thresh):
+    total_loss = total_loss / grad_acc_step
+    total_loss.backward()
+    if step % grad_acc_step == 0:
+        # Clipping gradients to avoid gradient explosion
+        nn.utils.clip_grad_norm_(model.parameters(), grad_clip_thresh)
+
+        # Update weights
+        optimizer.step_and_update_lr()
+        optimizer.zero_grad()
 
 
 def main(args, configs):
@@ -38,10 +50,11 @@ def main(args, configs):
     )
 
     # Prepare model
-    model, optimizer = get_model(args, configs, device, train=True)
+    model, optimizer_main, optimizer_disc = get_model(args, configs, device, train=True)
     model = nn.DataParallel(model)
     num_param = get_param_num(model)
-    Loss = StyleSpeechLoss(preprocess_config, model_config).to(device)
+    Loss_1 = MetaStyleSpeechLossMain(preprocess_config, model_config, train_config).to(device)
+    Loss_2 = MetaStyleSpeechLossDisc(preprocess_config, model_config).to(device)
     print("Number of StyleSpeech Parameters:", num_param)
 
     # Load vocoder
@@ -60,6 +73,7 @@ def main(args, configs):
     # Training
     step = args.restore_step + 1
     epoch = 1
+    meta_learning_step = train_config["step"]["meta_learning_step"]
     grad_acc_step = train_config["optimizer"]["grad_acc_step"]
     grad_clip_thresh = train_config["optimizer"]["grad_clip_thresh"]
     total_step = train_config["step"]["total_step"]
@@ -78,45 +92,37 @@ def main(args, configs):
             for batch in batchs:
                 batch = to_device(batch, device)
 
-                # Forward
-                output = model(*(batch[2:-5]))
-
+                # Warm-up Stage
+                if step <= meta_learning_step:
+                    # Forward
+                    output = (None, None, *model(*(batch[2:-5])))
                 # Meta Learning
-                (
-                    D_s,
-                    D_t,
-                    G,
-                    p_predictions,
-                    e_predictions,
-                    log_d_predictions,
-                    d_rounded,
-                    src_masks,
-                    mel_masks,
-                    src_lens,
-                    mel_lens,
-                ) = model.module.meta_learner_1(*(batch[2:]))
-                D_t_s, D_t_q, D_s_s, D_s_q, style_logit = model.module.meta_learner_2(*(batch[2:]))
+                else:
+                    # Step 1: Update Enc_s and G
+                    output = model.module.meta_learner_1(*(batch[2:]))
 
                 # Cal Loss
-                losses = Loss(batch, output)
-                total_loss = losses[0]
+                losses_1 = Loss_1(batch, output)
+                total_loss = losses_1[0]
 
                 # Backward
-                total_loss = total_loss / grad_acc_step
-                total_loss.backward()
-                if step % grad_acc_step == 0:
-                    # Clipping gradients to avoid gradient explosion
-                    nn.utils.clip_grad_norm_(model.parameters(), grad_clip_thresh)
+                backward(model, optimizer_main, total_loss, step, grad_acc_step, grad_clip_thresh)
 
-                    # Update weights
-                    optimizer.step_and_update_lr()
-                    optimizer.zero_grad()
+                # Meta Learning
+                if step > meta_learning_step:
+                    # Step 2: Update D_t and D_s
+                    output_disc = model.module.meta_learner_2(*(batch[2:]))
+
+                    losses_2 = Loss_2(batch[2], output_disc)
+                    total_loss_disc = losses_2[0]
+
+                    backward(model, optimizer_disc, total_loss_disc, step, grad_acc_step, grad_clip_thresh)
 
                 if step % log_step == 0:
-                    losses = [l.item() for l in losses]
+                    losses_1 = [l.item() for l in losses_1]
                     message1 = "Step {}/{}, ".format(step, total_step)
-                    message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Pitch Loss: {:.4f}, Energy Loss: {:.4f}, Duration Loss: {:.4f}".format(
-                        *losses
+                    message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Pitch Loss: {:.4f}, Energy Loss: {:.4f}, Duration Loss: {:.4f}, Adversarial_D_s Loss: {:.4f}, Adversarial_D_t Loss: {:.4f}".format(
+                        *losses_1
                     )
 
                     with open(os.path.join(train_log_path, "log.txt"), "a") as f:
@@ -124,12 +130,12 @@ def main(args, configs):
 
                     outer_bar.write(message1 + message2)
 
-                    log(train_logger, step, losses=losses)
+                    log(train_logger, step, losses=losses_1)
 
                 if step % synth_step == 0:
                     fig, wav_reconstruction, wav_prediction, tag = synth_one_sample(
                         batch,
-                        output,
+                        output[2:],
                         vocoder,
                         model_config,
                         preprocess_config,
@@ -168,7 +174,8 @@ def main(args, configs):
                     torch.save(
                         {
                             "model": model.module.state_dict(),
-                            "optimizer": optimizer._optimizer.state_dict(),
+                            "optimizer_main": optimizer_main._optimizer.state_dict(),
+                            "optimizer_disc": optimizer_disc._optimizer.state_dict(),
                         },
                         os.path.join(
                             train_config["path"]["ckpt_path"],

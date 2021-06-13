@@ -5,7 +5,7 @@ import torch
 import numpy as np
 
 import hifigan
-from model import StyleSpeech, ScheduledOptim
+from model import StyleSpeech, ScheduledOptimMain, ScheduledOptimDisc
 
 
 def get_model(args, configs, device, train=False):
@@ -21,13 +21,17 @@ def get_model(args, configs, device, train=False):
         model.load_state_dict(ckpt["model"])
 
     if train:
-        scheduled_optim = ScheduledOptim(
+        scheduled_optim_main = ScheduledOptimMain(
             model, train_config, model_config, args.restore_step
         )
+        scheduled_optim_disc = ScheduledOptimDisc(
+            model, train_config
+        )
         if args.restore_step:
-            scheduled_optim.load_state_dict(ckpt["optimizer"])
+            scheduled_optim_main.load_state_dict(ckpt["optimizer_main"])
+            scheduled_optim_disc.load_state_dict(ckpt["optimizer_disc"])
         model.train()
-        return model, scheduled_optim
+        return model, scheduled_optim_main, scheduled_optim_disc
 
     model.eval()
     model.requires_grad_ = False

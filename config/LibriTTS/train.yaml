@@ -12,10 +12,12 @@ optimizer:
   warm_up_step: 4000
   anneal_steps: [300000, 400000, 500000]
   anneal_rate: 0.3
+  lr_disc: 0.00002
+  alpha: 10
 step:
-  warmup_step: 60000
-  total_step: 100000
+  meta_learning_step: 120000
+  total_step: 200000
   log_step: 100
   synth_step: 1000
   val_step: 1000
-  save_step: 20000
+  save_step: 40000

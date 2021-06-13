@@ -38,7 +38,7 @@ class Dataset(Dataset):
         speaker_id = self.speaker_map[speaker]
         raw_text = self.raw_text[idx]
         phone = np.array(text_to_sequence(self.text[idx], self.cleaners))
-        query_idx = random.choice([x for x in self.speaker_to_ids[speaker] if x != idx]) # Sample the query text
+        query_idx = random.choice(self.speaker_to_ids[speaker]) # Sample the query text
         raw_quary_text = self.raw_text[query_idx]
         query_phone = np.array(text_to_sequence(self.text[query_idx], self.cleaners))
         mel_path = os.path.join(

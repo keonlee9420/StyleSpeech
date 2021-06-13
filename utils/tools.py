@@ -112,6 +112,8 @@ def log(
         logger.add_scalar("Loss/pitch_loss", losses[2], step)
         logger.add_scalar("Loss/energy_loss", losses[3], step)
         logger.add_scalar("Loss/duration_loss", losses[4], step)
+        logger.add_scalar("Loss/adv_D_s_loss", losses[5], step)
+        logger.add_scalar("Loss/adv_D_t_loss", losses[6], step)
 
     if fig is not None:
         logger.add_figure(tag, fig)

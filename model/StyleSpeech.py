@@ -156,7 +156,6 @@ class StyleSpeech(nn.Module):
             mel_lens,
         )
 
-    # Step 1: Update Enc_s and G
     def meta_learner_1(
         self,
         speakers,
@@ -192,7 +191,7 @@ class StyleSpeech(nn.Module):
             output,
             _,
             _,
-            log_d_predictions_adv,
+            _,
             _,
             mel_lens_adv,
             mel_masks_adv,
@@ -252,7 +251,6 @@ class StyleSpeech(nn.Module):
             mel_lens,
         )
 
-    # Step 2: Update D_t and D_s
     def meta_learner_2(
         self,
         speakers,
@@ -288,7 +286,7 @@ class StyleSpeech(nn.Module):
             output,
             _,
             _,
-            log_d_predictions,
+            _,
             _,
             mel_lens_adv,
             mel_masks_adv,
