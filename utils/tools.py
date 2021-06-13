@@ -83,7 +83,6 @@ def to_device(data, device):
             ref_infos,
         ) = data
 
-        speakers = torch.from_numpy(speakers).long().to(device)
         texts = torch.from_numpy(texts).long().to(device)
         src_lens = torch.from_numpy(src_lens).to(device)
         mels = torch.from_numpy(mels).float().to(device)

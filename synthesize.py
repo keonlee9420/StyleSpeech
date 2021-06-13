@@ -191,12 +191,6 @@ if __name__ == "__main__":
         help="reference audio path to extract the speech style, for single-sentence mode only",
     )
     parser.add_argument(
-        "--speaker_id",
-        type=str,
-        default=0,
-        help="speaker ID for multi-speaker synthesis, for single-sentence mode only",
-    )
-    parser.add_argument(
         "-p",
         "--preprocess_config",
         type=str,
@@ -260,17 +254,14 @@ if __name__ == "__main__":
         )
     if args.mode == "single":
         ids = raw_texts = [args.text[:100]]
-        with open(os.path.join(preprocess_config["path"]["preprocessed_path"], "speakers.json")) as f:
-            speaker_map = json.load(f)
-        speakers = np.array([speaker_map[args.speaker_id]])
         if preprocess_config["preprocessing"]["text"]["language"] == "en":
             texts = np.array([preprocess_english(args.text, preprocess_config)])
         elif preprocess_config["preprocessing"]["text"]["language"] == "zh":
             texts = np.array([preprocess_mandarin(args.text, preprocess_config)])
         text_lens = np.array([len(texts[0])])
         mels, mel_lens, ref_info = get_audio(preprocess_config, args.ref_audio)
-        batchs = [(["_".join([os.path.basename(args.ref_audio).strip(".wav"), args.speaker_id, id]) for id in ids], \
-            raw_texts, speakers, texts, text_lens, max(text_lens), mels, mel_lens, max(mel_lens), [ref_info])]
+        batchs = [(["_".join([os.path.basename(args.ref_audio).strip(".wav"), id]) for id in ids], \
+            raw_texts, None, texts, text_lens, max(text_lens), mels, mel_lens, max(mel_lens), [ref_info])]
 
     control_values = args.pitch_control, args.energy_control, args.duration_control
 

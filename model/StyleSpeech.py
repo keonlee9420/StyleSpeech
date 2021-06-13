@@ -103,7 +103,7 @@ class StyleSpeech(nn.Module):
 
     def forward(
         self,
-        speakers,
+        _,
         texts,
         src_lens,
         max_src_len,
