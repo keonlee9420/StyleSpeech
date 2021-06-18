@@ -16,8 +16,9 @@ class ScheduledOptimMain:
         self.n_warmup_steps = train_config["optimizer"]["warm_up_step"]
         self.anneal_steps = train_config["optimizer"]["anneal_steps"]
         self.anneal_rate = train_config["optimizer"]["anneal_rate"]
-        self.current_step = current_step
         self.init_lr = np.power(model_config["transformer"]["encoder_hidden"], -0.5)
+        meta_learning_warmup = train_config["step"]["meta_learning_warmup"]
+        self.current_step = current_step if current_step <= meta_learning_warmup else current_step - meta_learning_warmup
 
     def step_and_update_lr(self):
         self._update_learning_rate()

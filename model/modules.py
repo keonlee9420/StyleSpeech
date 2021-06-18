@@ -723,12 +723,12 @@ class StyleDiscriminator(nn.Module):
         x = self.fc_2(x) # [B, T, H]
 
         # Temporal Average Pooling, h(x)
-        x = torch.mean(x, dim=1) # [B, H]
+        x = torch.mean(x, dim=1, keepdim=True) # [B, 1, H]
 
         # Output Computation
-        s_i = style_prototype(speakers).unsqueeze(1) # [B, 1, H]
-        V = self.V(x).unsqueeze(2) # [B, H, 1]
-        o = torch.matmul(s_i, V).squeeze(2) # [B, 1]
+        s_i = style_prototype(speakers) # [B, H]
+        V = self.V(s_i).unsqueeze(2) # [B, H, 1]
+        o = torch.matmul(x, V).squeeze(2) # [B, 1]
         o = self.w_b_0(o).squeeze() # [B,]
 
         return o

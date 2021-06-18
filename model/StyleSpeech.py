@@ -192,7 +192,7 @@ class StyleSpeech(nn.Module):
             _,
             _,
             _,
-            _,
+            d_rounded_adv,
             mel_lens_adv,
             mel_masks_adv,
         ) = self.G(
@@ -203,7 +203,7 @@ class StyleSpeech(nn.Module):
             max_quary_mel_len,
             None,
             None,
-            quary_d_targets,
+            None,
             p_control,
             e_control,
             d_control,
@@ -211,9 +211,8 @@ class StyleSpeech(nn.Module):
 
         D_s = self.D_s(self.style_prototype, speakers, output, mel_masks_adv)
 
-        quary_texts = self.phoneme_encoder(quary_texts, style_vector, quary_src_masks)
-        quary_texts = self.phoneme_linear(quary_texts)
-        D_t = self.D_t(self.variance_adaptor.upsample, quary_texts, output, max(mel_lens_adv).item(), mel_masks_adv, quary_d_targets)
+        quary_texts = self.phoneme_encoder.src_word_emb(quary_texts)
+        D_t = self.D_t(self.variance_adaptor.upsample, quary_texts, output, max(mel_lens_adv).item(), mel_masks_adv, d_rounded_adv)
 
         (
             G,
@@ -229,8 +228,8 @@ class StyleSpeech(nn.Module):
             src_masks,
             mel_masks,
             max_mel_len,
-            None,
-            None,
+            p_targets,
+            e_targets,
             d_targets,
             p_control,
             e_control,
@@ -287,7 +286,7 @@ class StyleSpeech(nn.Module):
             _,
             _,
             _,
-            _,
+            d_rounded_adv,
             mel_lens_adv,
             mel_masks_adv,
         ) = self.G(
@@ -298,19 +297,17 @@ class StyleSpeech(nn.Module):
             max_quary_mel_len,
             None,
             None,
-            quary_d_targets,
+            None,
             p_control,
             e_control,
             d_control,
         )
 
-        texts = self.phoneme_encoder(texts, style_vector, src_masks)
-        texts = self.phoneme_linear(texts)
+        texts = self.phoneme_encoder.src_word_emb(texts)
         D_t_s = self.D_t(self.variance_adaptor.upsample, texts, mels, max_mel_len, mel_masks, d_targets)
 
-        quary_texts = self.phoneme_encoder(quary_texts, style_vector, quary_src_masks)
-        quary_texts = self.phoneme_linear(quary_texts)
-        D_t_q = self.D_t(self.variance_adaptor.upsample, quary_texts, output, max(mel_lens_adv).item(), mel_masks_adv, quary_d_targets)
+        quary_texts = self.phoneme_encoder.src_word_emb(quary_texts)
+        D_t_q = self.D_t(self.variance_adaptor.upsample, quary_texts, output, max(mel_lens_adv).item(), mel_masks_adv, d_rounded_adv)
 
         D_s_s = self.D_s(self.style_prototype, speakers, mels, mel_masks)
         D_s_q = self.D_s(self.style_prototype, speakers, output, mel_masks_adv)

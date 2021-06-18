@@ -78,8 +78,8 @@ class LinearNorm(nn.Module):
         if bias:
             nn.init.constant_(self.linear.bias, 0.0)
         if spectral_norm:
-            nn.utils.spectral_norm(self.linear)
-    
+            self.linear = nn.utils.spectral_norm(self.linear)
+
     def forward(self, x):
         x = self.linear(x)
         return x
@@ -154,7 +154,7 @@ class ConvNorm(nn.Module):
             bias=bias,
         )
         if spectral_norm:
-            nn.utils.spectral_norm(self.conv)
+            self.conv = nn.utils.spectral_norm(self.conv)
 
     def forward(self, signal):
         conv_signal = self.conv(signal)

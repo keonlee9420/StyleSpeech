@@ -141,7 +141,7 @@ class MetaStyleSpeechLossDisc(nn.Module):
 
         return (
             total_loss,
-            D_t_loss,
             D_s_loss,
+            D_t_loss,
             cls_loss,
         )

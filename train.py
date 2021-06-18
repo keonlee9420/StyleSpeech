@@ -119,10 +119,10 @@ def main(args, configs):
                     backward(model, optimizer_disc, total_loss_disc, step, grad_acc_step, grad_clip_thresh)
 
                 if step % log_step == 0:
-                    losses_1 = [l.item() for l in losses_1]
+                    losses = [l.item() for l in (losses_1+losses_2[1:])]
                     message1 = "Step {}/{}, ".format(step, total_step)
-                    message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Pitch Loss: {:.4f}, Energy Loss: {:.4f}, Duration Loss: {:.4f}, Adversarial_D_s Loss: {:.4f}, Adversarial_D_t Loss: {:.4f}".format(
-                        *losses_1
+                    message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Pitch Loss: {:.4f}, Energy Loss: {:.4f}, Duration Loss: {:.4f}, Adversarial_D_s Loss: {:.4f}, Adversarial_D_t Loss: {:.4f}, D_s Loss: {:.4f}, D_t Loss: {:.4f}, cls Loss: {:.4f}".format(
+                        *losses
                     )
 
                     with open(os.path.join(train_log_path, "log.txt"), "a") as f:
@@ -130,7 +130,7 @@ def main(args, configs):
 
                     outer_bar.write(message1 + message2)
 
-                    log(train_logger, step, losses=losses_1)
+                    log(train_logger, step, losses=losses)
 
                 if step % synth_step == 0:
                     fig, wav_reconstruction, wav_prediction, tag = synth_one_sample(
@@ -163,7 +163,7 @@ def main(args, configs):
 
                 if step % val_step == 0:
                     model.eval()
-                    message = evaluate(model, step, configs, val_logger, vocoder)
+                    message = evaluate(model, step, configs, val_logger, vocoder, len(losses))
                     with open(os.path.join(val_log_path, "log.txt"), "a") as f:
                         f.write(message + "\n")
                     outer_bar.write(message)
