@@ -10,10 +10,6 @@ PyTorch Implementation of [Meta-StyleSpeech : Multi-Speaker Adaptive Text-to-Spe
     <img src="img/model_2.png" width="80%">
 </p>
 
-# Status (2021.06.09)
-- [x] StyleSpeech
-- [ ] Meta-StyleSpeech
-
 # Quickstart
 
 ## Dependencies
