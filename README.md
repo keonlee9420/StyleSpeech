@@ -10,7 +10,7 @@ PyTorch Implementation of [Meta-StyleSpeech : Multi-Speaker Adaptive Text-to-Spe
     <img src="img/model_2.png" width="80%">
 </p>
 
-# Status (2021.06.13)
+# Branch
 - [x] StyleSpeech (`naive` branch)
 - [x] Meta-StyleSpeech (`main` branch)
 
@@ -24,7 +24,7 @@ pip3 install -r requirements.txt
 
 ## Inference
 
-You have to download [pretrained models](https://drive.google.com/drive/folders/1fQmu1v7fRgfM-TwxAJ96UUgnl79f1FHt?usp=sharing) and put them in ``output/ckpt/LibriTTS/``.
+You have to download [pretrained models](https://drive.google.com/drive/folders/1fQmu1v7fRgfM-TwxAJ96UUgnl79f1FHt?usp=sharing) and put them in ``output/ckpt/LibriTTS_meta_learner/``.
 
 For English single-speaker TTS, run
 ```

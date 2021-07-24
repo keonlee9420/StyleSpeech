@@ -4,11 +4,11 @@ import numpy as np
 
 class ScheduledOptimMain:
     """ A simple wrapper class for learning rate scheduling """
-
+    
     def __init__(self, model, train_config, model_config, current_step):
-
         self._optimizer = torch.optim.Adam(
-            model.parameters(),
+            [param for name, param in model.named_parameters()
+                        if not any([filtered_name in name for filtered_name in ['D_s', 'D_t']])],
             betas=train_config["optimizer"]["betas"],
             eps=train_config["optimizer"]["eps"],
             weight_decay=train_config["optimizer"]["weight_decay"],
@@ -17,8 +17,8 @@ class ScheduledOptimMain:
         self.anneal_steps = train_config["optimizer"]["anneal_steps"]
         self.anneal_rate = train_config["optimizer"]["anneal_rate"]
         self.init_lr = np.power(model_config["transformer"]["encoder_hidden"], -0.5)
-        meta_learning_warmup = train_config["step"]["meta_learning_warmup"]
-        self.current_step = current_step if current_step <= meta_learning_warmup else current_step - meta_learning_warmup
+        # meta_learning_warmup = train_config["step"]["meta_learning_warmup"]
+        self.current_step = current_step# if current_step <= meta_learning_warmup else current_step - meta_learning_warmup
 
     def step_and_update_lr(self):
         self._update_learning_rate()
@@ -28,8 +28,9 @@ class ScheduledOptimMain:
         # print(self.init_lr)
         self._optimizer.zero_grad()
 
-    def load_state_dict(self, path):
-        self._optimizer.load_state_dict(path)
+    def load_state_dict(self, state_dict):
+        state_dict['param_groups'] = self._optimizer.state_dict()['param_groups']
+        self._optimizer.load_state_dict(state_dict)
 
     def _get_lr_scale(self):
         lr = np.min(
