@@ -48,7 +48,7 @@ For example, one can increase the speaking rate by 20 % and decrease the volume 
 ```
 python3 synthesize.py --text "YOUR_DESIRED_TEXT" --restore_step 200000 --mode single -p config/LibriTTS/preprocess.yaml -m config/LibriTTS/model.yaml -t config/LibriTTS/train.yaml --duration_control 0.8 --energy_control 0.8
 ```
-Note that the controllability is originated from FastSpeech2 and not a vital interest of StyleSpeech.
+Note that the controllability is originated from FastSpeech2 and not a vital interest of StyleSpeech. Please refer to [STYLER](https://arxiv.org/abs/2103.09474) [[demo](https://keonlee9420.github.io/STYLER-Demo/), [code](https://github.com/keonlee9420/STYLER)] for the controllability of each style factor.
 
 # Training
 
@@ -99,11 +99,11 @@ tensorboard --logdir output/log/LibriTTS
 ```
 
 to serve TensorBoard on your localhost.
-<!-- The loss curves, synthesized mel-spectrograms, and audios are shown.
+The loss curves, synthesized mel-spectrograms, and audios are shown.
 
 ![](./img/tensorboard_loss.png)
 ![](./img/tensorboard_spec.png)
-![](./img/tensorboard_audio.png) -->
+![](./img/tensorboard_audio.png)
 
 # Implementation Issues
 
