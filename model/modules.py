@@ -391,8 +391,7 @@ class VarianceAdaptor(nn.Module):
                 (torch.round(torch.exp(log_duration_prediction) - 1) * d_control),
                 min=0,
             )
-            max_len = int(duration_rounded.sum(dim=1).max().item())
-            x, mel_len = self.length_regulator(x, duration_rounded, max_len)
+            x, mel_len = self.length_regulator(x, duration_rounded, None)
             mel_mask = get_mask_from_lengths(mel_len)
         return x, duration_rounded, mel_len, mel_mask
 
