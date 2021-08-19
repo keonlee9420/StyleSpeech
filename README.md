@@ -22,7 +22,7 @@ pip3 install -r requirements.txt
 
 You have to download the [pretrained models](https://drive.google.com/drive/folders/1fQmu1v7fRgfM-TwxAJ96UUgnl79f1FHt?usp=sharing) and put them in ``output/ckpt/LibriTTS/``.
 
-For English single-speaker TTS, run
+For English multi-speaker TTS, run
 ```
 python3 synthesize.py --text "YOUR_DESIRED_TEXT" --ref_audio path/to/reference_audio.wav --speaker_id <SPEAKER_ID> --restore_step 100000 --mode single -p config/LibriTTS/preprocess.yaml -m config/LibriTTS/model.yaml -t config/LibriTTS/train.yaml
 ```
