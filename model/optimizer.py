@@ -59,7 +59,8 @@ class ScheduledOptimDisc:
     def __init__(self, model, train_config):
 
         self._optimizer = torch.optim.Adam(
-            model.parameters(),
+            [param for name, param in model.named_parameters()
+                        if any([filtered_name in name for filtered_name in ['D_s', 'D_t']])],
             betas=train_config["optimizer"]["betas"],
             eps=train_config["optimizer"]["eps"],
             weight_decay=train_config["optimizer"]["weight_decay"],
@@ -74,8 +75,9 @@ class ScheduledOptimDisc:
         # print(self.init_lr)
         self._optimizer.zero_grad()
 
-    def load_state_dict(self, path):
-        self._optimizer.load_state_dict(path)
+    def load_state_dict(self, state_dict):
+        state_dict['param_groups'] = self._optimizer.state_dict()['param_groups']
+        self._optimizer.load_state_dict(state_dict)
 
     def _init_learning_rate(self):
         lr = self.init_lr
