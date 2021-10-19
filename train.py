@@ -119,7 +119,10 @@ def main(args, configs):
                     backward(model, optimizer_disc, total_loss_disc, step, grad_acc_step, grad_clip_thresh)
 
                 if step % log_step == 0:
-                    losses = [l.item() for l in (losses_1+losses_2[1:])]
+                    if step > meta_learning_warmup:
+                        losses = [l.item() for l in (losses_1+losses_2[1:])]
+                    else:
+                        losses = [l.item() for l in (losses_1+tuple([torch.zeros(1).to(device) for _ in range(3)]))]
                     message1 = "Step {}/{}, ".format(step, total_step)
                     message2 = "Total Loss: {:.4f}, Mel Loss: {:.4f}, Pitch Loss: {:.4f}, Energy Loss: {:.4f}, Duration Loss: {:.4f}, Adversarial_D_s Loss: {:.4f}, Adversarial_D_t Loss: {:.4f}, D_s Loss: {:.4f}, D_t Loss: {:.4f}, cls Loss: {:.4f}".format(
                         *losses
