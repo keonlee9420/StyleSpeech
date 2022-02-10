@@ -61,24 +61,17 @@ The supported datasets are
 
 ## Preprocessing
  
-First, run 
+Run 
 ```
 python3 prepare_align.py config/LibriTTS/preprocess.yaml
 ```
 for some preparations.
 
-In this implementation, [Montreal Forced Aligner](https://montreal-forced-aligner.readthedocs.io/en/latest/) (MFA) is used to obtain the alignments between the utterances and the phoneme sequences.
+For the forced alignment, [Montreal Forced Aligner](https://montreal-forced-aligner.readthedocs.io/en/latest/) (MFA) is used to obtain the alignments between the utterances and the phoneme sequences.
+Pre-extracted alignments for the datasets are provided [here](https://drive.google.com/drive/folders/1fizpyOiQ1lG2UDaMlXnT3Ll4_j6Xwg7K?usp=sharing). 
+You have to unzip the files in `preprocessed_data/LibriTTS/TextGrid/`. Alternately, you can [run the aligner by yourself](https://montreal-forced-aligner.readthedocs.io/en/latest/user_guide/workflows/index.html).
 
-Download the official MFA package and run
-```
-./montreal-forced-aligner/bin/mfa_align raw_data/LibriTTS/ lexicon/librispeech-lexicon.txt english preprocessed_data/LibriTTS
-```
-or
-```
-./montreal-forced-aligner/bin/mfa_train_and_align raw_data/LibriTTS/ lexicon/librispeech-lexicon.txt preprocessed_data/LibriTTS
-```
-
-to align the corpus and then run the preprocessing script.
+After that, run the preprocessing script by
 ```
 python3 preprocess.py config/LibriTTS/preprocess.yaml
 ```
